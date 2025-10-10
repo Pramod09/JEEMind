@@ -1,0 +1,28 @@
+{
+	"agents": [
+		{
+			"role": "Math",
+			"agent_id": "2VZ8HFYISY",
+			"alias_id": "GC0DYDM1XY",
+			"region_name": "us-east-1"
+		},
+		{
+			"role": "Biology",
+			"agent_id": "QPWQP95GG3",
+			"alias_id": "HJOUW1FRYG",
+			"region_name": "us-east-1"
+		},
+		{
+			"role": "Physics",
+			"agent_id": "QPWQP95GG3",
+			"alias_id": "HJOUW1FRYG",
+			"region_name": "us-east-1"
+		},
+		{
+			"role": "Chemistry",
+			"agent_id": "QPWQP95GG3",
+			"alias_id": "HJOUW1FRYG",
+			"region_name": "us-east-1"
+		}
+	]
+}
