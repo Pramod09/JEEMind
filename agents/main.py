@@ -336,7 +336,7 @@ with st.sidebar:
             except Exception:
                 pass
     with cols[1]:
-        st.subheader('Start chat with JEE Insight Engine')
+        st.subheader('JEE Insight ')
 
     # Place Chat Session and Format selectors on one line with controlled widths
     selector_col1, selector_col2 = st.columns([3, 2])
