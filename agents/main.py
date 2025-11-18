@@ -172,12 +172,21 @@ def normalize_markdown_for_ui(raw: str) -> str:
     # Reduce doubled backslashes to single (so \\frac -> \frac for LaTeX)
     s = s.replace("\\\\", "\\")
 
-    # Convert inline A) B) C) into list items if present
-    if re.search(r"\bA[\)\.]\s*.*\bB[\)\.]", s, flags=re.S):
-        s = re.sub(r"\s*([A-Z])[\)\.]\s*", r"\n- **\1.** ", s)
+    # If the text already looks like our formatted output (e.g. produced by
+    # format_question), don't re-run aggressive label conversions which can
+    # produce duplicated '**' markers. Detect existing Question header or
+    # already-present labeled bullets like "- **A." and skip label recipes.
+    already_formatted = bool(
+        re.search(r"^\*\*Question:\*\*", s) or re.search(r"(?m)^[ \t]*-\s+\*\*[A-Z]\\.", s)
+    )
 
-    # Convert leading label lines to bullets (A. option -> - **A.** option)
-    s = re.sub(r"(?m)^[ \t]*([A-Z])[\.\)]\s+", r"- **\1.** ", s)
+    if not already_formatted:
+        # Convert inline A) B) C) into list items if present
+        if re.search(r"\bA[\)\.]\s*.*\bB[\)\.]", s, flags=re.S):
+            s = re.sub(r"\s*([A-Z])[\)\.]\s*", r"\n- **\1.** ", s)
+
+        # Convert leading label lines to bullets (A. option -> - **A.** option)
+        s = re.sub(r"(?m)^[ \t]*([A-Z])[\.\)]\s+", r"- **\1.** ", s)
 
     # Collapse multiple blank lines
     s = re.sub(r"\n\s*\n+", "\n\n", s)
