@@ -6,6 +6,7 @@ import html
 import imghdr
 import os
 import boto3
+import json
 
 # Set page config early so Streamlit uses the desired layout and title
 st.set_page_config(page_title="JEEMind", layout="wide")
@@ -516,8 +517,8 @@ if query := st.chat_input('input your question here'):
         except Exception:
             final_text = completion
         # If final_text differs from last_displayed, replace; otherwise still mark as complete
-       # chat_box.update_msg(normalize_markdown_for_ui(final_text), element_index=0, streaming=False, state="complete")
-        chat_box.update_msg(completion, element_index=0, streaming=False, state="complete")
+        # Push the final formatted and normalized text to the UI and mark the message complete.
+        chat_box.update_msg(normalize_markdown_for_ui(final_text), element_index=0, streaming=False, state="complete")
         
         #chat_box.update_msg("\n\n".join(completion), element_index=1, streaming=False, state="complete")
 
