@@ -195,140 +195,141 @@ def normalize_markdown_for_ui(raw: str) -> str:
 
 
 def format_question(text: str, fmt: str) -> str:
-    """Robust top-level formatter for question-style LLM outputs.
-
-    Returns a Markdown string with:
-      - Question (bold)
-      - Metadata line (italic) with Type | Topic | Difficulty when available
-      - Options as bullet list items, each on its own line
-      - A collapsible 'View answer' section if answer/solution is present
-
-    This function prefers structured JSON parsing, and falls back to heuristics.
-    It uses normalize_markdown_for_ui on extracted fields to keep LaTeX intact.
     """
-    if not text:
-        return ""
-    fmt_norm = (fmt or "MCQ").lower()
+    Parse JSON object(s) embedded in `text` and return a Markdown question/answer
+    formatted string. If no JSON is found or parsing fails, return the original text.
 
-    parsed = None
+    Expected JSON shape (example):
+    {
+      "type": "MCQ",
+      "topic": "Calculus",
+      "question": "...",
+      "options": ["opt1", "opt2", ...],
+      "answer": ["opt2"],
+      "difficulty": "Easy"
+    }
+    """
+    if not text or not text.strip():
+        return ""
+
+    letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+    def format_single(obj: dict) -> str:
+        q_type = obj.get("type", "")
+        topic = obj.get("topic", "")
+        difficulty = obj.get("difficulty", "")
+        question = obj.get("question", "") or obj.get("q", "")
+        options = obj.get("options", []) or []
+        answers = obj.get("answer", []) or obj.get("answers", [])
+
+        # Normalize answers to list of strings
+        if isinstance(answers, (str, int)):
+            answers = [str(answers)]
+        answers = [str(a).strip() for a in answers]
+
+        lines = []
+        # Use header that normalize_markdown_for_ui recognizes
+        lines.append(f"**Question:** {question}")
+        meta = []
+        if topic:
+            meta.append(f"Topic: {topic}")
+        if difficulty:
+            meta.append(f"Difficulty: {difficulty}")
+        if q_type:
+            meta.append(f"Type: {q_type}")
+        if meta:
+            lines.append(" | ".join(meta))
+
+        # Options
+        if options:
+            lines.append("")
+            for i, opt in enumerate(options):
+                label = letters[i] if i < len(letters) else str(i + 1)
+                lines.append(f"- **{label}.** {opt}")
+
+        # Resolve answer labels (prefer letter + option text when possible)
+        resolved = []
+        for a in answers:
+            a_str = str(a).strip()
+            # If answer matches an option text, return its letter + text
+            matched = False
+            for i, opt in enumerate(options):
+                if a_str == opt or a_str == str(i) or a_str == str(i + 1):
+                    label = letters[i] if i < len(letters) else str(i + 1)
+                    resolved.append(f"{label}. {opt}")
+                    matched = True
+                    break
+            if matched:
+                continue
+            # If answer looks like a letter (A or A.) map to option if possible
+            m = re.match(r"^([A-Za-z])\.?$", a_str)
+            if m:
+                idx = ord(m.group(1).upper()) - ord("A")
+                if 0 <= idx < len(options):
+                    resolved.append(f"{m.group(1).upper()}. {options[idx]}")
+                    continue
+            # Otherwise just include raw answer
+            resolved.append(a_str)
+
+        if resolved:
+            lines.append("")
+            answer_label = "Answer" if len(resolved) == 1 else "Answers"
+            lines.append(f"**{answer_label}:** {', '.join(resolved)}")
+
+        return "\n".join(lines)
+
+    # Try parsing entire text as JSON first
     try:
         parsed = json.loads(text)
-    except Exception:
-        m = re.search(r"\{[\s\S]*\}", text)
-        if m:
-            try:
-                parsed = json.loads(m.group(0))
-            except Exception:
-                parsed = None
-
-    if isinstance(parsed, dict):
-        q = parsed.get("question") or parsed.get("prompt") or parsed.get("body") or ""
-        opts = parsed.get("options") or parsed.get("choices") or []
-        ans = parsed.get("answer") or parsed.get("solution") or parsed.get("correct") or ""
-        qtype = parsed.get("type") or parsed.get("format") or fmt_norm.upper()
-        topic = parsed.get("topic") or parsed.get("subject") or None
-        difficulty = parsed.get("difficulty") or parsed.get("level") or None
-
-        # Use a conservative sanitizer for parsed fields to avoid turning narrative
-        # text into option bullets. This preserves LaTeX/backslashes while cleaning
-        # literal escape sequences.
-        def sanitize_text(s: str) -> str:
-            if not s:
-                return ""
-            s2 = s.replace("\\r", "")
-            s2 = s2.replace("\\t", " ")
-            s2 = s2.replace("\\n", "\n")
-            # collapse repeated blank lines
-            s2 = re.sub(r"\n\s*\n+", "\n\n", s2)
-            return s2.strip()
-
-        def is_valid_option(opt: str) -> bool:
-            if opt is None:
-                return False
-            t = str(opt).strip()
-            if not t:
-                return False
-            # Exclude obvious narration/tool text or JSON artifacts
-            blacklist = ["GET__", "tool", "I will", "I will provide", "```", "{", "}\n", '"type":', '"hint":']
-            low = t.lower()
-            for bad in blacklist:
-                if bad.lower() in low:
-                    return False
-            # exclude very long non-option blocks (likely narration)
-            if len(t) > 1000:
-                return False
-            return True
-
-        out_lines = []
-        if q:
-            out_lines.append(f"**Question:** {sanitize_text(q)}")
-            out_lines.append("")
-
-        meta_items = []
-        if qtype:
-            meta_items.append(f"Type: {qtype}")
-        if topic:
-            meta_items.append(f"Topic: {topic}")
-        if difficulty:
-            meta_items.append(f"Difficulty: {difficulty}")
-        if meta_items:
-            out_lines.append("*" + " | ".join(meta_items) + "*")
-            out_lines.append("")
-
-        if isinstance(opts, (list, tuple)) and opts:
-            # filter irrelevant/empty options
-            opts = [o for o in opts if is_valid_option(o)]
-            if opts:
-                labels = [chr(ord("A") + i) for i in range(len(opts))]
-                for lab, opt in zip(labels, opts):
-                    out_lines.append(f"- **{lab}.** {sanitize_text(str(opt))}")
-                out_lines.append("")
-
-        if ans:
-            out_lines.append(f"<details><summary><b>View answer</b></summary>\n\n<pre>{html.escape(str(ans))}</pre>\n</details>")
-
-        return "\n".join(out_lines)
-
-    # Fallback: heuristics for plain text
-    if fmt_norm in ("mcq", "msq"):
-        s = normalize_markdown_for_ui(text)
-        # try to split question and options
-        lines = [ln for ln in s.splitlines() if ln.strip()]
-        if not lines:
-            return s
-        # Find option lines (starting with A., A), or a bullet)
-        opt_idx = None
-        for i, ln in enumerate(lines):
-            if re.match(r'^[A-Za-z][\)\.].*', ln) or re.match(r'^-\s+\*\*?[A-Za-z]', ln) or re.match(r'^[A-Z]\.', ln):
-                opt_idx = i
-                break
-        if opt_idx is None and len(lines) > 1:
-            q = lines[0]
-            opts = lines[1:]
-        elif opt_idx is not None:
-            q = " ".join(lines[:opt_idx])
-            opts = lines[opt_idx:]
+        objs = []
+        if isinstance(parsed, dict):
+            objs = [parsed]
+        elif isinstance(parsed, list):
+            objs = parsed
         else:
-            return s
+            # fallback to treating as plain text
+            return text
+    except Exception:
+        # Try to extract balanced {...} blocks (supports multiple JSON objects in text)
+        objs = []
+        parts = []
+        depth = 0
+        start = None
+        for i, ch in enumerate(text):
+            if ch == "{":
+                if depth == 0:
+                    start = i
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0 and start is not None:
+                    parts.append(text[start : i + 1])
+                    start = None
+        for p in parts:
+            try:
+                parsed_p = json.loads(p)
+                if isinstance(parsed_p, dict):
+                    objs.append(parsed_p)
+                elif isinstance(parsed_p, list):
+                    objs.extend(parsed_p)
+            except Exception:
+                # skip unparseable chunks
+                continue
 
-        out = []
-        if q:
-            out.append(f"**Question:** {q}")
-            out.append("")
-        # filter irrelevant/empty options in fallback
-        opts = [o for o in opts if is_valid_option(o)]
-        labels = [chr(ord('A') + i) for i in range(len(opts))]
-        for lab, opt in zip(labels, opts):
-            opt_clean = re.sub(r'^[A-Za-z0-9\-\*\u2022\)\.\(\s]+', '', opt).strip()
-            out.append(f"- **{lab}.** {opt_clean}")
-        return "\n".join(out)
+    if not objs:
+        # Nothing parsed, return original text
+        return text
 
-    if fmt_norm in ("numeric/integer", "numeric", "integer"):
-        s = normalize_markdown_for_ui(text)
-        return "Answer (numeric):\n\n```\n" + s + "\n```"
+    formatted = []
+    for obj in objs:
+        try:
+            formatted.append(format_single(obj))
+        except Exception:
+            # on any per-object failure, include raw repr
+            formatted.append(str(obj))
 
-    # Passage or default: normalize and return
-    return normalize_markdown_for_ui(text)
+    # Separate multiple questions with two newlines
+    return "\n\n".join(formatted)
 
 def on_chat_change():
     chat_box.use_chat_name(st.session_state["chat_name"])
@@ -472,7 +473,10 @@ if query := st.chat_input('input your question here'):
         # Ensure we have a session id
         if session_id is None:
             session_id = _get_session()
-        
+        session = boto3.Session(profile_name="default")
+
+        client = session.client("bedrock-agent-runtime", region_name="us-east-1")
+
         generator = client.invoke_agent(
             agentId = agent_id,
             agentAliasId = alias_id,
