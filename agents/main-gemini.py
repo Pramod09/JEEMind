@@ -1,12 +1,11 @@
 import streamlit as st
 from pathlib import Path
 import base64
-import re
-import html
+
 import imghdr
 import os
 import boto3
-import json
+from gemini.testModel import invoke_gemini_api
 
 # Set page config early so Streamlit uses the desired layout and title
 st.set_page_config(page_title="JEEMind", layout="wide")
@@ -153,50 +152,6 @@ chat_box.use_chat_name("Math") # add a chat conversatoin
  # add a chat conversatoin
 
 
-def normalize_markdown_for_ui(raw: str) -> str:
-    """Normalize raw LLM output to clean markdown for UI rendering.
-
-    - convert literal \n sequences into real newlines
-    - collapse extra blank lines
-    - fix double-backslashes for LaTeX
-    - format inline option labels into list items
-    """
-    if not raw:
-        return ""
-
-    s = raw
-    # Unescape common escape sequences produced by LLMs
-    s = s.replace("\\r", "")
-    s = s.replace("\\t", " ")
-    s = s.replace("\\n", "\n")
-    # Reduce doubled backslashes to single (so \\frac -> \frac for LaTeX)
-    s = s.replace("\\\\", "\\")
-
-    # If the text already looks like our formatted output (e.g. produced by
-    # format_question), don't re-run aggressive label conversions which can
-    # produce duplicated '**' markers. Detect existing Question header or
-    # already-present labeled bullets like "- **A." and skip label recipes.
-    already_formatted = bool(
-        re.search(r"^\*\*Question:\*\*", s) or re.search(r"(?m)^[ \t]*-\s+\*\*[A-Z]\\.", s)
-    )
-
-    if not already_formatted:
-        # Convert inline A) B) C) into list items if present
-        if re.search(r"\bA[\)\.]\s*.*\bB[\)\.]", s, flags=re.S):
-            s = re.sub(r"\s*([A-Z])[\)\.]\s*", r"\n- **\1.** ", s)
-
-        # Convert leading label lines to bullets (A. option -> - **A.** option)
-        s = re.sub(r"(?m)^[ \t]*([A-Z])[\.\)]\s+", r"- **\1.** ", s)
-
-    # Collapse multiple blank lines
-    s = re.sub(r"\n\s*\n+", "\n\n", s)
-    s = s.strip()
-    return s
-
-def format_question(raw: str, fmt: str) -> str:
-    return raw
-
-
 def on_chat_change():
     chat_box.use_chat_name(st.session_state["chat_name"])
     chat_box.context_to_session() # restore widget values to st.session_state when chat name changed
@@ -220,14 +175,7 @@ with st.sidebar:
     with selector_col1:
         chat_name = st.selectbox("Chat Session:", get_all_agent_name_as_list(), key="chat_name", on_change=on_chat_change)
         chat_box.use_chat_name(chat_name)
-    # with selector_col2:
-    #     question_format = st.selectbox(
-    #         "Format",
-    #         options=["MCQ", "MSQ", "Numeric/Integer", "Passage-based"],
-    #         key="question_format",
-    #         index=0,
-    #     )
-    # Optional: ensure selectboxes have a minimum width via HTML/CSS
+    
     st.markdown(
         """
         <style>
@@ -237,9 +185,6 @@ with st.sidebar:
         """,
         unsafe_allow_html=True,
     )
-    #streaming = st.checkbox('streaming', key="streaming")
-    #in_expander = st.checkbox('show messages in expander', key="in_expander")
-    #show_history = st.checkbox('show session state', key="show_history")
     streaming = True # disable streaming for this example
     in_expander = True # show messages in expander
     show_history = True # do not show session state
@@ -321,21 +266,21 @@ if query := st.chat_input('input your question here'):
         # Ensure we have a session id
         if session_id is None:
             session_id = _get_session()
-        session = boto3.Session(profile_name="default")
+        # session = boto3.Session(profile_name="default")
 
-        client = session.client("bedrock-agent-runtime", region_name="us-east-1")
+        # client = session.client("bedrock-agent-runtime", region_name="us-east-1")
 
-        generator = client.invoke_agent(
-            agentId = agent_id,
-            agentAliasId = alias_id,
-            enableTrace = True,
-            sessionId = session_id,
-            inputText = input_payload,
-            streamingConfigurations = { 
-            "applyGuardrailInterval" : 20,
-            "streamFinalResponse" : False
-            }
-        )
+        # generator = client.invoke_agent(
+        #     agentId = agent_id,
+        #     agentAliasId = alias_id,
+        #     enableTrace = True,
+        #     sessionId = session_id,
+        #     inputText = input_payload,
+        #     streamingConfigurations = { 
+        #     "applyGuardrailInterval" : 20,
+        #     "streamFinalResponse" : False
+        #     }
+        # )
         elements = chat_box.ai_say(
             [
                 # you can use string for Markdown output if no other parameters provided
@@ -345,41 +290,17 @@ if query := st.chat_input('input your question here'):
             ]
         )
         
-        # Use top-level formatter
-        pass
 
-        completion = ""
-        fmt = st.session_state.get("question_format", "MCQ")
-        last_displayed = None
-        for event in generator.get("completion"):
-            if 'chunk' in event:
-                chunk = event["chunk"]
-                text = chunk["bytes"].decode()
-                completion += text
-                # format partial output for streaming display
-                try:
-                    display_text = format_question(completion, fmt)
-                except Exception:
-                    display_text = completion
-                # Only update the UI when the formatted display changes to avoid sticking on first chunk
-                if display_text != last_displayed:
-                    chat_box.update_msg(normalize_markdown_for_ui(display_text), element_index=0, streaming=True)
-                    last_displayed = display_text
+        completion = invoke_gemini_api(input_payload)
 
         print("session_id:", session_id)
         print("input_payload:", input_payload)
         print("completion:", completion)
-        print("Displayed text:", display_text)
+        final_text = completion
         print("###"*33)
      
         # final update when complete - always push final formatted text and mark complete
-        try:
-            final_text = format_question(completion, fmt)
-        except Exception:
-            final_text = completion
-        # If final_text differs from last_displayed, replace; otherwise still mark as complete
-        # Push the final formatted and normalized text to the UI and mark the message complete.
-        chat_box.update_msg(normalize_markdown_for_ui(final_text), element_index=0, streaming=False, state="complete")
+        chat_box.update_msg(final_text, element_index=0, streaming=False, state="complete")
         
         #chat_box.update_msg("\n\n".join(completion), element_index=1, streaming=False, state="complete")
 
