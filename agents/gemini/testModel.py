@@ -3,7 +3,7 @@ import os # We import 'os' just in case we still want to pull it from the enviro
 
 # Get the API key from the environment variable, or hardcode it if necessary for debugging.
 # Make sure to replace "YOUR_ACTUAL_API_KEY" with your key string.
-api_key = os.getenv("GEMINI_API_KEY", "AIzaSyCqjMw_y8hvFm7j6ogEI_uWnwCCVVwIcZQ")
+api_key = os.getenv("GEMINI_API_KEY", "YOUR_ACTUAL_API_KEY")
 
 # Pass the API key to the client constructor directly.
 client = genai.Client(api_key=api_key)
