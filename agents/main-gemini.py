@@ -3,9 +3,9 @@ from pathlib import Path
 import base64
 
 import imghdr
-import os
-import boto3
-from gemini.testModel import invoke_gemini_api
+#from gemini.testModel import invoke_gemini_api
+
+from gemini.main_gemini_upload_file_filestore import invoke_gemini_api_with_fs
 
 # Set page config early so Streamlit uses the desired layout and title
 st.set_page_config(page_title="JEEMind", layout="wide")
@@ -251,8 +251,9 @@ if query := st.chat_input('input your question here'):
         )
         
 
-        completion = invoke_gemini_api(input_payload)
+        #completion = invoke_gemini_api(input_payload)
 
+        completion = invoke_gemini_api_with_fs(input_payload)
         print("session_id:", session_id)
         print("input_payload:", input_payload)
         print("completion:", completion)
