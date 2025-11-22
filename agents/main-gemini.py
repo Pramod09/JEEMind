@@ -235,52 +235,12 @@ if query := st.chat_input('input your question here'):
 
         config = get_agent_config_by_role(chat_name)
         print(config)
-      
-        if config:
-            agent_id = config.get("agent_id", agent_id)
-            alias_id = config.get("alias_id", alias_id)
-            region = config.get("region", region)
-        #generator = llm.chat_stream(query)
-     
-        
-        # Ensure region is set; prefer explicit config, then env vars, then boto3 session, else default
-        if not region:
-            region = os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION") or boto3.session.Session().region_name
-            if not region:
-                region = "us-east-1"
-                try:
-                    st.warning(f"No AWS region configured for agent calls; defaulting to {region}. Set region in agent config or AWS_REGION env var.")
-                except Exception:
-                    pass
-
-        client = boto3.client(
-                service_name = "bedrock-agent-runtime",
-                region_name = region,
-            )
-        
-        # Include the selected question format so the agent can generate the requested type
-        fmt = st.session_state.get("question_format", "MCQ")
-        # Always prefix the query with an explicit format marker the agent can parse
-        #input_payload = f"[QUESTION_FORMAT:{fmt}]\n{query}"
+       
         input_payload = query
         # Ensure we have a session id
         if session_id is None:
             session_id = _get_session()
-        # session = boto3.Session(profile_name="default")
-
-        # client = session.client("bedrock-agent-runtime", region_name="us-east-1")
-
-        # generator = client.invoke_agent(
-        #     agentId = agent_id,
-        #     agentAliasId = alias_id,
-        #     enableTrace = True,
-        #     sessionId = session_id,
-        #     inputText = input_payload,
-        #     streamingConfigurations = { 
-        #     "applyGuardrailInterval" : 20,
-        #     "streamFinalResponse" : False
-        #     }
-        # )
+       
         elements = chat_box.ai_say(
             [
                 # you can use string for Markdown output if no other parameters provided
