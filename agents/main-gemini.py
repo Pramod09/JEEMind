@@ -5,7 +5,7 @@ import base64
 import imghdr
 #from gemini.testModel import invoke_gemini_api
 
-from gemini.main_gemini_upload_file_filestore import invoke_gemini_api_with_fs
+from gemini.main_gemini_upload_file_filestore import invoke_gemini_api_with_fs, reformat_question
 
 # Set page config early so Streamlit uses the desired layout and title
 st.set_page_config(page_title="JEEMind", layout="wide")
@@ -125,9 +125,7 @@ def find_logo_path(names=("logo",), exts=("jpeg", "jpg", "png", "webp")):
                     if name == f"{n.lower()}.{ext.lower()}":
                         return entry
     return None
-import time
-import simplejson as json
-from backend import bedrock_services
+
 from common.utils import get_all_agent_name_as_list, get_agent_config_by_role
 
 
@@ -221,10 +219,9 @@ feedback_kwargs = {
 }
 
 if query := st.chat_input('input your question here'):
-    chat_box.user_say(query)
+    chat_box.user_say(reformat_question(query))
     if streaming:
         import uuid
-        import boto3
 
         if session_id is None:
             session_id = _get_session() # Get the current session ID
@@ -234,7 +231,7 @@ if query := st.chat_input('input your question here'):
         region = None  # Replace with your actual AWS region
 
         config = get_agent_config_by_role(chat_name)
-        print(config)
+        #print(config)
        
         input_payload = query
         # Ensure we have a session id
@@ -249,8 +246,6 @@ if query := st.chat_input('input your question here'):
                 #Markdown("", in_expander=in_expander, title="references"),
             ]
         )
-        
-
         #completion = invoke_gemini_api(input_payload)
 
         completion = invoke_gemini_api_with_fs(input_payload)
